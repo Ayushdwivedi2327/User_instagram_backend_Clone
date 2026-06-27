@@ -1,5 +1,6 @@
 const userModel = require("../models/user.model"); // import user model for database access
-const crypto = require("crypto"); // import crypto module for password hashing
+// const crypto = require("crypto"); // import crypto module for password hashing
+const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken"); // import jsonwebtoken for JWT creation
 
 async function registerController(req, res) {
@@ -13,7 +14,7 @@ async function registerController(req, res) {
       message: "User already exists", // return duplicate user message
     });
   }
-  const hash = crypto.createHash("sha256").update(password).digest("hex"); // hash the password using SHA-256
+  const hash = await bcrypt.hash(password, 10); // hash the password
   const user = await userModel.create({
     // create a new user document
     username, // store username
@@ -56,12 +57,14 @@ async function loginController(req, res) {
   });
   if (!user) {
     // if no matching user is found
-    return res.status(404).json({
+    return res.status(404).json({ 
       // send not found status
       message: "User  not exists", // return user not found message
     });
-    const hash = crypto.createHash("sha256").update(password).digest("hex"); // hash password to compare with stored password
-    const isPasswordValid = hash === user.password; // compare hashed password with stored hash
+    await bcrypt.hash(password, 10); // hash the password
+
+    const isPasswordValid = await bcrypt.compare(password, user.password); // hash the password
+    // compare hashed password with stored hash
     if (!isPasswordValid) {
       // if password is incorrect
       return res.status(401).json({
