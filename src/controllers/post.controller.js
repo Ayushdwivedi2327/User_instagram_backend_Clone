@@ -1,51 +1,149 @@
-// Import the post model for database operations
+// Require the Post mongoose model to perform CRUD operations on the posts collection
 const postModel = require("../models/post.model");
-// Import ImageKit and toFile utility for image upload functionality
+// Require ImageKit SDK and the helper 'toFile' to convert buffers into File-like objects
 const { ImageKit, toFile } = require("@imagekit/nodejs");
+// Require jsonwebtoken library to verify and decode JWT tokens sent by clients
 const jwt = require("jsonwebtoken");
-// Initialize ImageKit instance with private key from environment variables for secure authentication
+// Instantiate ImageKit with the private key from environment variables so uploads are authenticated
 const imagekit = new ImageKit({
   privateKey: process.env.IMAGEKIT_PRIVATE_KEY,
 });
 
-// Async controller function to handle post creation with image upload
+// Controller: createPostController
+// - Purpose: handle incoming POST requests to create a new post with an image upload.
+// - Assumptions: the request contains a multipart/form-data file under req.file,
+//   authentication token in req.cookies.token, and a caption in req.body.caption.
 async function createPostController(req, res) {
-  // Log request body and uploaded file details for debugging purposes
+  // Log incoming request body and file metadata to aid debugging during development
   console.log(req.body, req.file);
+
+  // Read JWT token from cookie named 'token'
   const token = req.cookies.token;
+  // If token is missing, immediately return 401 Unauthorized with a descriptive message
   if (!token) {
     return res.status(401).json({
       message: "Token not provided, Unauthorised access",
     });
   }
+
+  // Prepare variable to hold decoded token payload
   let decoded = "";
+  // Verify the JWT using the server-side secret; if verification fails, send 401
   try {
     decoded = jwt.verify(token, process.env.JWT_SECRET);
-  } catch (err) { 
+  } catch (err) {
     return res.status(401).json({
       message: "User not authorised",
     });
-  } 
-  // console.log("the decoded message is this",decoded)
-  // Upload file to ImageKit: convert buffer to file format and upload with a test filename
+  }
+
+  // Convert the uploaded file buffer into a File-like object and upload to ImageKit
+  // - toFile converts a Buffer to an object accepted by ImageKit SDK
+  // - folder organizes uploads under a dedicated folder for this project
   const file = await imagekit.files.upload({
-    file: await toFile(Buffer.from(req.file.buffer), "file"), // Convert buffer to file object
-    fileName: "Test", // Set the filename for the uploaded image
+    file: await toFile(Buffer.from(req.file.buffer), "file"), // convert buffer to File-like
+    fileName: "Test", // filename used in ImageKit; can be replaced with a meaningful name
     folder: "Cohort-2-Insta-Clone-Posts",
   });
 
+  // Create a post document in MongoDB with caption, uploaded image URL and user id from token
   const post = await postModel.create({
-    caption: req.body.caption,
-    imgUrl: file.url,
-    user: decoded.id,
+    caption: req.body.caption, // text caption provided by client
+    imgUrl: file.url, // URL returned by ImageKit after successful upload
+    user: decoded.id, // user id extracted from decoded JWT payload
   });
+
+  // Respond with 201 Created and include the newly created post object
   res.status(201).json({
     message: "Post created successfully",
     post,
   });
-  // Send the uploaded file response back to the client
+
+  // Note: the following res.send(file) is unreachable because a response has already been sent.
+  // If the intention is to send the raw ImageKit response instead of the created post,
+  // remove the previous res.status(201).json call. Keeping this here to preserve original
+  // behavior but it will not execute.
   res.send(file);
 }
 
+// Controller: getPostController
+// - Purpose: return all posts created by the authenticated user.
+// - Flow: verify JWT, query posts collection for documents matching user id, return results.
+async function getPostController(req, res) {
+  // Read token from cookies and validate it
+  const token = req.cookies.token;
+  let decoded = "";
+  try {
+    decoded = jwt.verify(token, process.env.JWT_SECRET);
+  } catch (err) {
+    // On verification failure, return 401 Unauthorized
+    return res.status(401).json({
+      message: "Invalid Token",
+    });
+  }
+
+  // Extract user id from decoded token and query posts for this user
+  const userId = decoded.id;
+  const posts = await postModel.find({
+    user: userId,
+  });
+
+  // Return the found posts with a 200 OK status
+  res.status(200).json({
+    message: "Post fetched successfully",
+    posts,
+  });
+}
+
+// Controller: getPostDetails
+// - Purpose: return a single post by id only if the requesting user is the owner.
+// - Security: enforces authentication and authorization checks before exposing post data.
+async function getPostDetails(req, res) {
+  // Ensure token exists in cookies
+  const token = req.cookies.token;
+  if (!token) {
+    return res.status(401).json({
+      message: "Unauthorised access",
+    });
+  }
+
+  // Verify token and extract payload (user id)
+  let decoded = "";
+  try {
+    decoded = jwt.verify(token, process.env.JWT_SECRET);
+  } catch (err) {
+    return res.status(401).json({
+      message: "Invalid token",
+    });
+  }
+
+  // Get user id from token and post id from route parameters
+  const userId = decoded.id;
+  const postId = req.params.postId;
+
+  // Fetch the post document by id from the database
+  const post = await postModel.findById(postId);
+  if (!post) {
+    // If no document exists for the given id, return 404 Not Found
+    return res.status(404).json({
+      message: "Post not found with the id",
+    });
+  }
+
+  // Authorization: ensure the requesting user owns the post
+  if (post.user.toString() != userId.toString()) {
+    return res.status(403).json({
+      message: "Forbidden content",
+    });
+  }
+
+  // On success, return the post data with 200 OK
+  return res.status(200).json({
+    message: "Post fetched successfully",
+    post,
+  });
+}
+
+
 // Export the controller function for use in routes
-module.exports = { createPostController };
+module.exports = { createPostController, getPostController, getPostDetails };
