@@ -1,5 +1,6 @@
 // Require the Post mongoose model to perform CRUD operations on the posts collection
 const postModel = require("../models/post.model");
+const likeModel = require('../models/like.model')
 // Require ImageKit SDK and the helper 'toFile' to convert buffers into File-like objects
 const { ImageKit, toFile } = require("@imagekit/nodejs");
 // Require jsonwebtoken library to verify and decode JWT tokens sent by clients
@@ -12,31 +13,8 @@ const imagekit = new ImageKit({
 // Controller: createPostController
 // - Purpose: handle incoming POST requests to create a new post with an image upload.
 // - Assumptions: the request contains a multipart/form-data file under req.file,
-//   authentication token in req.cookies.token, and a caption in req.body.caption.
+//   authentication token in req.cookies.token, and a caption in <req className="body caption"></req>
 async function createPostController(req, res) {
-  // Log incoming request body and file metadata to aid debugging during development
-  console.log(req.body, req.file);
-
-  // Read JWT token from cookie named 'token'
-  const token = req.cookies.token;
-  // If token is missing, immediately return 401 Unauthorized with a descriptive message
-  if (!token) {
-    return res.status(401).json({
-      message: "Token not provided, Unauthorised access",
-    });
-  }
-
-  // Prepare variable to hold decoded token payload
-  let decoded = "";
-  // Verify the JWT using the server-side secret; if verification fails, send 401
-  try {
-    decoded = jwt.verify(token, process.env.JWT_SECRET);
-  } catch (err) {
-    return res.status(401).json({
-      message: "User not authorised",
-    });
-  }
-
   // Convert the uploaded file buffer into a File-like object and upload to ImageKit
   // - toFile converts a Buffer to an object accepted by ImageKit SDK
   // - folder organizes uploads under a dedicated folder for this project
@@ -50,7 +28,7 @@ async function createPostController(req, res) {
   const post = await postModel.create({
     caption: req.body.caption, // text caption provided by client
     imgUrl: file.url, // URL returned by ImageKit after successful upload
-    user: decoded.id, // user id extracted from decoded JWT payload
+    user: req.user.id, // user id extracted from decoded JWT payload
   });
 
   // Respond with 201 Created and include the newly created post object
@@ -70,20 +48,8 @@ async function createPostController(req, res) {
 // - Purpose: return all posts created by the authenticated user.
 // - Flow: verify JWT, query posts collection for documents matching user id, return results.
 async function getPostController(req, res) {
-  // Read token from cookies and validate it
-  const token = req.cookies.token;
-  let decoded = "";
-  try {
-    decoded = jwt.verify(token, process.env.JWT_SECRET);
-  } catch (err) {
-    // On verification failure, return 401 Unauthorized
-    return res.status(401).json({
-      message: "Invalid Token",
-    });
-  }
-
   // Extract user id from decoded token and query posts for this user
-  const userId = decoded.id;
+  const userId = req.user.id;
   const posts = await postModel.find({
     user: userId,
   });
@@ -99,26 +65,8 @@ async function getPostController(req, res) {
 // - Purpose: return a single post by id only if the requesting user is the owner.
 // - Security: enforces authentication and authorization checks before exposing post data.
 async function getPostDetails(req, res) {
-  // Ensure token exists in cookies
-  const token = req.cookies.token;
-  if (!token) {
-    return res.status(401).json({
-      message: "Unauthorised access",
-    });
-  }
-
-  // Verify token and extract payload (user id)
-  let decoded = "";
-  try {
-    decoded = jwt.verify(token, process.env.JWT_SECRET);
-  } catch (err) {
-    return res.status(401).json({
-      message: "Invalid token",
-    });
-  }
-
   // Get user id from token and post id from route parameters
-  const userId = decoded.id;
+  const userId = req.user.id;
   const postId = req.params.postId;
 
   // Fetch the post document by id from the database
@@ -143,7 +91,23 @@ async function getPostDetails(req, res) {
     post,
   });
 }
-
-
+async function likePostController(req, res) {
+  const username = req.user.username;
+  const postId = req.params.postId;
+  const post = await postModel.findById(postId);
+  if (!post) {
+    return res.status(404).json({
+      message: "The post you are looking for does not exists",
+    });
+  }
+  const like = await likeModel.create({
+    post:postId,
+    user:username
+  })
+  return res.status(200).json({
+    message:"Post liked successfully",
+    like
+  })
+}
 // Export the controller function for use in routes
-module.exports = { createPostController, getPostController, getPostDetails };
+module.exports = { createPostController, getPostController, getPostDetails  , likePostController};

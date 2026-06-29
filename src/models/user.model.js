@@ -10,15 +10,28 @@ const userSchema = new mongoose.Schema({
     unique: [true, "Email already exists"],
     required: [true, "Email is required"],
   },
-  password:{
-    type:String,
-    required:[true,'password is required']
+  password: {
+    type: String,
+    required: [true, "password is required"],
   },
-  bio:String,
-  profileimg:{
-    type:String,
-    default:"https://ik.imagekit.io/ayushDwivedi/insta/posts/TEST_OSU7INBPf?updatedAt=1775049558921"
-  }
+  bio: String,
+  profileimg: {
+    type: String,
+    default:
+      "https://ik.imagekit.io/ayushDwivedi/insta/posts/TEST_OSU7INBPf?updatedAt=1775049558921",
+  },
+  followers: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "users",
+    },
+  ],
+  following: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "users",
+    },
+  ],
 });
-const userModel = mongoose.model('users' , userSchema)
-module.exports = userModel
+const userModel = mongoose.model("users", userSchema);
+module.exports = userModel;

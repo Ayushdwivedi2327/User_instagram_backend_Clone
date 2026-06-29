@@ -28,6 +28,7 @@ async function registerController(req, res) {
     // create JWT token for session
     {
       id: user._id, // include user ID in token payload
+      username: user.username,
     },
     process.env.JWT_SECRET, // sign token with secret from environment variables
     {
@@ -57,7 +58,7 @@ async function loginController(req, res) {
   });
   if (!user) {
     // if no matching user is found
-    return res.status(404).json({ 
+    return res.status(404).json({
       // send not found status
       message: "User  not exists", // return user not found message
     });
@@ -77,6 +78,7 @@ async function loginController(req, res) {
     // create JWT token for authenticated user
     {
       id: user._id, // include user ID in token payload
+      username: user.username,
     },
     process.env.JWT_SECRET, // use secret key from environment variables
     { expiresIn: "1d" }, // token expires in one day

@@ -13,6 +13,7 @@ const postSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     required: [true, "user id is required for creating the post"],
   },
+  likes: {},
 });
 const postModel = mongoose.model("posts", postSchema);
 module.exports = postModel;
